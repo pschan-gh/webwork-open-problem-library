@@ -1,0 +1,56 @@
+## DBsubject(Calculus - single variable)
+## DBchapter(Techniques of integration)
+## DBsection(Trigonometric substitution)
+## Institution(W.H.Freeman)
+## Author(Christopher Sira)
+## MLT(Trig_simplify)
+## Level(2)
+## MO(1)
+## TitleText1('Calculus: Early Transcendentals')
+## AuthorText1('Rogawski')
+## EditionText1('2')
+## Section1('7.3')
+## Problem1('39')
+## KEYWORDS('calculus', 'integration', 'integral', 'trigonometric substitution', 'substitution', 'trigonometry', 'trigonometric', 'trig')
+
+DOCUMENT();
+loadMacros(
+  "PGstandard.pl",
+  "PGchoicemacros.pl",
+  "Parser.pl",
+  "freemanMacros.pl",
+  "PGcourse.pl",
+  "wwquill.pl"
+);
+$context = Context();
+
+$context->variables->add(C=>'Real');
+
+TEXT(beginproblem());
+
+$d = random(1,5,1);
+$c = 2*$d;
+$a = random(2, 10, 2);
+
+$ac = $a*$c; 
+$ad = $a*$d;
+$dd = $d*$d;
+$add = $a * $dd;
+
+$ans = Formula("(1/sqrt($a)) * ln(abs(x + $d + sqrt(x**2 + $c x)))");
+
+Context()->texStrings;
+BEGIN_TEXT
+Evaluate the definite integral.
+$PAR
+\( \displaystyle \int \frac{dx}{\sqrt{$ac x + $a x^2}} \) = \{ans_rule(50)\} \( + C\).
+
+END_TEXT
+Context()->normalStrings;
+
+ANS($ans->cmp(upToConstant=>1));
+
+Context()->texStrings;
+ENDDOCUMENT();
+
+

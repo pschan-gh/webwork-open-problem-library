@@ -1,0 +1,53 @@
+## DBsubject(Calculus - single variable)
+## DBchapter(Applications of differentiation)
+## DBsection(Optimization - natural and social sciences)
+## Institution(UCSB)
+## Level(5)
+## Static(1)
+## TitleText1('Calculus: Early Transcendentals')
+## AuthorText1('Stewart')
+## EditionText1('5')
+## Section1('4.7')
+## Problem1('38')
+## KEYWORDS('Optimization','Differentiation')
+
+DOCUMENT();
+
+loadMacros(
+  "PGstandard.pl",
+  "PGchoicemacros.pl",
+  "PGcourse.pl"
+);
+
+TEXT(&beginproblem);
+$showPartialCorrectAnswers = 1;
+#$a=random(1,10,1);
+#$b=2*$a;
+#$b=random(1,10,1)*random(-1,1,2);
+#$c=random(1,10,1)*random(-1,1,2);
+
+# Insert problem text between the $PAR, and space for the
+# answer, like this   \(y =\) \{ans_rule(50)\}
+# just before the END_TEXT.
+
+BEGIN_TEXT
+
+$PAR
+
+For a fish swimming at a speed v relative to the water, the
+energy expenditure per unit time is proportional to \(v^3\). It is
+believed that migrating fish try to minimize the total energy
+required to swim a fixed distance. If the fish is swimming
+against a current u (u < v), determine the value of v that minimizes E, the total energy required to swim a distance L. 
+
+(Your answer may depend on L, u).
+
+$PAR
+
+\{ans_rule(20)\}
+
+END_TEXT
+
+ANS(fun_cmp('3*u/2', vars => ['L','u','a']));
+
+ENDDOCUMENT();

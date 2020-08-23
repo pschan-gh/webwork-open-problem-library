@@ -1,0 +1,404 @@
+## DESCRIPTION
+## Algebraic equations
+## ENDDESCRIPTION
+
+
+########################################
+#  Initialization
+
+DOCUMENT();
+
+loadMacros(
+"PGstandard.pl",
+"MathObjects.pl",
+"parserMultiAnswer.pl",
+"AnswerFormatHelp.pl",
+"contextArbitraryString.pl",
+"parserPopUp.pl",
+"nested.pl",
+"custom_ma_ui.pl"
+);
+
+TEXT(beginproblem());
+
+#######################################
+#  Set-up
+
+$b = random(2,5,1);
+
+Context("Numeric");
+#Context("KeepParens");
+Context()->variables->set(x=>{limits=>[10,20]});
+Context()->variables->add(h=>["Real", limits => [0.1, 5]]);
+# Context()->flags->set(showExtraParens=>2);
+
+#MODEL ANSWERS
+my $line1 = Formula("(sqrt(x + h - $b) - sqrt(x - $b))/h");
+my $line2 = Formula("h/(h(sqrt(x + h - $b) + sqrt(x - $b)))");
+my $line3 = Formula("1/(sqrt(x + h - $b) + sqrt(x - $b))");
+my $line4 = Formula("1/(2*sqrt(x - $b))");
+
+Context()->strings->add('= limit_{h -> 0}' => {caseSensitive => 0});
+my $type = PopUp(["?", "=", "= lim_{h -> 0}"], "?");
+my $limit = PopUp(["?", "=", "= lim_{h -> 0}"], "= lim_{h -> 0}");
+my $equality = PopUp(["?", "=", "= lim_{h -> 0}"], "=");
+
+#INITIALIZE ARRAY OF COMPARATOR HASHES @CMPS
+my @cmps = ();
+
+my %cmp = (
+    'name' => 'cmp0', # EACH COMPARATOR MUST HAVE A UNIQUE NAME
+    'fp' => [ () ],   # INITIAL COMPARATOR HAS NO FINGERPRINT
+    'nfp' => [ () ],
+    'mp' => $type,
+    "checker" => '',
+    "score" => 0,
+    "parents" => [()],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp; # ADD NEW COMPARATOR TO ARRAY @CMPS
+
+my %cmp = ( # ( sqrt(x + h - $b) - sqrt(x - $b) ) / h
+    'name' => 'cmp1',
+    'fp' => [ ("sqrt(x+h-$b)-sqrt(x-$b)") ], #FINGERPRINT
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 1/4, # SCORE FOR MATCHING POSITIVELY WITH THIS COMPARATOR
+    "parents" => [("cmp0")],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp;
+
+my %cmp = ( # ( sqrt(x + h - $b)/h - sqrt(x - $b)/h )
+    'name' => 'cmp1a',
+    'fp' => [ ("sqrt(x+h-$b)", "sqrt(x-$b)") ],
+    'nfp' => [ ( "sqrt(x+h-$b)+sqrt(x-$b)", "h(sqrt(x+h-$b)+sqrt(x-$b))" ) ], # NEGATIVE FINGERPRINT
+    'mp' => $limit,
+    "score" => 1/4,
+    "parents" => [("cmp0", "cmp1")],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp;
+
+my %cmp = ( #  h / ( h ( sqrt(x + h - $b) - sqrt(x - $b) ) )
+    'name' => 'cmp2',
+    'fp' => [ ("h[sqrt(x+h-$b)+sqrt(x-$b)]", "h") ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/4,
+    "parents" => [("cmp1", "cmp1a")],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp;
+
+my %cmp = ( #  ( h / h ) / ( sqrt(x + h - $b) - sqrt(x - $b) )
+    'name' => 'cmp2a',
+    'fp' => [ ("[sqrt(x+h-$b)+sqrt(x-$b)]", "h") ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/4,
+    "parents" => [("cmp1", "cmp1a")],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp;
+
+my %cmp = ( #  1 / ( sqrt(x + h - $b) - sqrt(x - $b) )
+    'name' => 'cmp3',
+    'fp' => [ ( "([sqrt(x+h-$b)+sqrt(x-$b)])" ) ],
+    'nfp' => [ ("h") ],
+    'mp' => $limit,
+    "score" => 3/4,
+    "children" => [(~~%cmp4)],
+    "parents" => [("cmp2", "cmp2a")],
+    'has_children' => 1
+);
+push @cmps, ~~%cmp;
+
+my %cmp = ( #  1 / ( 2 sqrt(x - $b) )
+    'name' => 'cmp4',
+    'fp' => [ ("1/(2*sqrt(x - $b))") ],
+    'nfp' => [ () ],
+    'mp' => $equality,
+    "score" => 1,
+    "parents" => [("cmp3")],
+    'has_children' => 0
+);
+push @cmps, ~~%cmp;
+
+# REPLACE SQUARE BRACKETS WITH ROUND BRACKETS
+sub sanitize {
+    $str = shift;
+
+    $str = Formula($str);
+    $str =~ s/~~[/(/g;
+    $str =~ s/~~]/)/g;
+    return $str;
+}
+
+# MATCH TOKENS AGAINST FINGERPRINTS FP and NEGATIVE FINGERPRINTS NFP
+sub token_match {
+    my ($tokens, $fp, $nfp, $flag) = @_;
+
+    my $match = 1;
+
+    if (scalar(@{ $fp }) == 0) {
+	return 0;
+    }
+
+    for my $exp (@{ $fp }) { # ITERATE THROUGH ARRAY OF FINGERPRINTS
+	# warn "<br/>MATCH AGAINST: $exp";
+	if ($match) {
+	    $match = 0;
+	    for my $token (@$tokens) {
+		if (Formula($exp) == Formula($token)) {
+		    # warn "<br/>TOKEN: ".$token." MATCHES.";
+		    # warn $flag;
+		    if ($flag eq 'all') {
+			# MATCHES CURRENT FINGERPRINT, PROCEED TO MATCH AGAINST NEXT ENTRY IN FP ARRAY
+			$match = 1;
+			last;
+		    } elsif ($flag eq 'any') {
+			# MATCHES AT LEAST ONE FINGERPRINT, RETURN 1
+			return 1;
+		    }
+		}
+	    }
+	}
+    }
+    for my $exp (@{ $nfp }) { # ITERATE THROUGH ARRAY OF NEGATIVE FINGERPRINTS
+	# warn "<br/>NEGATIVE MATCH AGAINST: $exp";
+	for my $token (@$tokens) {
+	    # # warn "<br/>TOKEN: ".$token;
+	    if (Formula($exp) == Formula($token)) {
+		# MATCHES AT LEAST ONE NEGATIVE FINGERPRINT, RETURN 0
+		# warn "<br/>TOKEN: ".$token." MATCHES.";
+		return 0;
+	    }
+	}
+    }
+    return $match;
+}
+
+# MATCHES STUDENT ANSWER AGAINST COMPARATOR CMP
+sub comparator {
+
+    my ($mp, $exp, $cmp) = @_;
+
+    # MP STANDS FOR MULTIPLE CHOICE ANSWER
+    # EXP STANDS FOR MATH EXPRESSION
+
+    my $fp = $cmp->{'fp'};
+    my $nfp = $cmp->{'nfp'};
+    my $correct_mp = $cmp->{'mp'};
+
+    Context("Numeric");
+    Context()->variables->set(x=>{limits=>[10,20]});
+    Context()->variables->add(h=>["Real", limits => [0.1, 5]]);
+
+    if ((Formula($exp) == Formula($line1)) || (Formula($exp) == Formula($line4))) {
+
+	my @tokens = tokenize($exp); # BREAK STUDENT EXPRESSION INTO TOKENS
+
+        if ($mp eq $correct_mp) { # CHECK IF MULTIPLE CHOICE ANSWER MATCHES
+ 	    if ( token_match([ @tokens ], $fp, $nfp, "all" ) ) {
+                return 1; # POSITIVE MATCH
+            } else {
+                return -1; # NEGATIVE MATCH
+            }
+        } else {
+	    if ($correct_mp == $limit) {
+		if ( ( token_match([ @tokens ], [ (h) ], [()], "all" )) || ( $exp =~ /([^a-z]|^)h([^a-z]|$)/i ) ) {
+		    return -2; # expression after equality should not involve h
+		} else {
+		    return -1;
+		}
+	    }
+	}
+    } else {
+        return -2;
+    }
+
+}
+
+#MAIN ANSWER CHECKING ROUTINE
+$multians = MultiAnswer($limit, $line1, $limit, $line2, $limit, $line3, $equality, $line4, $equality, $line4, $equality, $line4)->with(
+  singleResult => 0,
+  allowBlankAnswers => 1,
+  removeParens => 0,
+  checker => sub {
+
+      my ( $correct, $student, $self ) = @_;
+
+      my @score = (0) x 12;
+
+      my @stu = @{$student};
+
+      # FEEDBACK MESSAGES
+      my $showmorework = "The expression is correct, but I don't quite follow how it is deduced.  Please show more intermediate steps.";
+      my $redundant = "Correct, keep going.";
+      my $keep_going = "&#x2713; Good, keep going.";
+      my $flaw = "There appears to be an error in your expression.";
+
+      Context("ArbitraryString");
+      my $limit = Compute("= lim_{h -> 0}");
+      my $equality = Compute("=");
+
+      my $stages = 1;
+      my $index = 0;
+      my $exp;
+
+      for (my $k = 0; $k < @stu/2; $k++) {
+          $self->setMessage(2*$k + 2, "<span style='color:#999'>This line is blank or ignored.</span>");
+      }
+
+      my %cmp = %{ $cmps[0] };
+
+      my @old_fp = ();
+
+      for (my $j=0; $j < @stu/2; $j++) {
+          $index = 2*$j;
+
+          Context("ArbitraryString");
+          if (String($stu[$index + 1]) =~ /^$/) {
+              last;
+          }
+
+          my $verdict = -2;
+          my $tentative;
+
+	  # LOOK FOR MATCHES AMONG ALL COMPARATORS
+	  # warn "LOOKING FOR RELATIVES OF: ".$cmp{'name'};
+	  for my $aux_cmp (@cmps) {
+	      $tentative = comparator(sanitize($stu[$index]), sanitize($stu[$index + 1]), $aux_cmp);
+	      if ($tentative == 1) { # POSITIVE MATCH WITH COMPARATOR CMP
+		  my $aux_name = $aux_cmp->{'name'};
+		  my $self_name = $cmp{'name'};
+	  	  # warn "MATCH AUX";
+		  # warn $aux_name." , ".$self_name;
+	  	  if ($aux_name eq $self_name) {
+	  	      # warn "PARENT MATCH"; # MATCHES CURRENT COMPARATOR CMP - REDUNDANT
+
+		      %cmp = %{ $aux_cmp };
+		      # warn "NEW CMP: ".$cmp{'name'};
+
+		      $verdict = 0 > $verdict ? 0 : $verdict;
+		  } elsif (grep( /^$self_name$/, @{ $aux_cmp->{'parents'} } )) {
+		      %cmp = %{ $aux_cmp };
+		      $verdict = 1 > $verdict ? 1 : $verdict;
+		      if ( $cmp{'has_children'} == 0 ) { # CHECK IF END IS REACHED
+			  $verdict = 2;
+		      };
+		      last; # MOVE TO END OF LOOP - NO FURTHER CHECKS AGAINST OTHER COMPARATORS
+		  } elsif (grep( /^$aux_name$/, @{ $cmp{'parents'} } )){
+
+		      %cmp = %{ $aux_cmp };
+		      $verdict = 0 > $verdict ? 0 : $verdict;
+		  } else { # MATCHES CMP WHICH IS NEITHER CHILD NOR PARENT OF CURRENT CMP
+		      $verdict = -1 > $verdict ? -1 : $verdict;
+
+		  }
+	      } elsif ($tentative == -1) {
+		  $verdict = -1 > $verdict ? -1 : $verdict;
+	      }
+	  }
+
+
+	  # FEEDBACK MESSAGES
+          if (($verdict == 2) || ($verdict == 1)) {
+              my $msg = $verdict == 2 ? "<strong>&#x2713;&#x2713; That is a correct final answer!</strong>" : $keep_going;
+              $self->setMessage($index + 2, $msg);
+              $score[$index]++;
+              $score[$index + 1]++;
+              if ($verdict == 2) {
+                  last;
+              } else {
+                  next;
+              }
+          } elsif ($verdict == 0) {
+              $self->setMessage($index + 2, $redundant);
+              next;
+          } elsif ($verdict == -1) {
+              $self->setMessage($index + 2, $showmorework);
+              last;
+          } elsif ($verdict == -2) {
+              $self->setMessage($index + 2, $flaw);
+              last;
+          }
+
+      }
+
+      # SCORE KEEPING
+      my $total = 0;
+      for (my $i = 0; $i < @stu; $i++) {
+          $total += $score[$i];
+      }
+      $total = $total == 0 ? 1 : $total;
+
+      for (my $i = 0; $i < @stu; $i++) {
+          $score[$i] *= @score*($cmp{'score'}/$total);
+      }
+      return @score;
+  }
+);
+
+################################################
+#  Main text
+
+Context()->texStrings;
+BEGIN_TEXT
+$BR
+$BCENTER
+$BBOLD
+Optional Experimental Problem.  Please let us know if you encounter any errors.
+$EBOLD
+$BR
+This is experimental programming, so
+it is possible that your answer is correct and well-justified yet a negative feedback message is nonetheless generated.
+$BR
+$BR
+Please use '\(\verb|sqrt(x)|\)' to denote \(\sqrt{x}\).
+$BR
+Please simplify fractional expressions as much as possible.
+For example, simplify \(\displaystyle \frac{\left(\frac{a}{b}\right)}{c}\) to \(\displaystyle\frac{a}{bc}\).
+$BR
+You may leave unused lines blank.
+$ECENTER
+$BR
+$HR
+Let \(\displaystyle f(x) = \sqrt{x - $b}\), \(x > $b\).
+Use the limit definition of the derivative to find \(f'(x)\).
+$BCENTER
+$BR
+\[f'(x) = \displaystyle \lim_{h \rightarrow 0} \frac{f(x + h) - f(x)}{h}\]
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \}  \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$ECENTER
+END_TEXT
+
+TEXT(MODES(
+     TeX        => "",
+     HTML       =>  $javaScript,
+ ));
+ 
+BEGIN_TEXT
+ \{ AnswerFormatHelp("formula") \}
+ END_TEXT
+
+################################################
+#  Answer evaluation
+
+$showPartialCorrectAnswers = 1;
+
+ANS($multians->cmp());
+
+ENDDOCUMENT();

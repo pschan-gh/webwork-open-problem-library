@@ -1,0 +1,76 @@
+## DESCRIPTION
+##   Calculate the Limit
+## ENDDESCRIPTION
+
+
+DOCUMENT();
+
+loadMacros(
+  "PGstandard.pl",
+  "MathObjects.pl",
+  "contextArbitraryString.pl",
+  "PGcourse.pl",
+  "parserPopUp.pl",
+);
+
+Context("Numeric");
+
+$k = random(2, 7, 1);
+$L = Compute("0");
+
+$popupMono=PopUp(["Select","Monotone increasing","Monotone decreasing", "Neither"], "Monotone decreasing");
+
+TEXT(beginproblem());
+$showPartialCorrectAnswers=1;
+
+BEGIN_TEXT
+Consider the recursively defined sequence:
+\[
+a_1 = $k
+\]
+\[
+a_{n + 1} = \frac{n + 1}{n^2}a_n, \quad \text{ for } n \geq 1
+\]
+
+$PAR
+The sequence is
+\{$popupMono->menu\} $BR
+$BR
+
+$PAR
+The sequence is bounded below by
+\{ ans_rule(10) \}                  	                  
+
+$PAR
+The sequence is bounded above by
+\{ ans_rule(10) \}
+
+$PAR
+The limit of the sequence is:
+\{ ans_rule(10) \}        
+$BR
+(If the sequence does not converge, enter "DNE")
+
+END_TEXT
+
+ANS($popupMono->cmp);
+ANS(Compute("0")->cmp(
+     showCoordinateHints => 0,                # doesn't make sense to give hints in this case
+     checker => sub {
+       my ($correct,$student,$ansHash) = @_;  # get correct and student MathObjects
+       my ($a) = $student->value;        # get coordinates of student answer
+       return ($a <= Compute($L) ? 1 : 0);      # return 1 if correct, 0 otherwise
+     }
+   ));
+ANS(Compute("0")->cmp(
+     showCoordinateHints => 0,                # doesn't make sense to give hints in this case
+     checker => sub {
+       my ($correct,$student,$ansHash) = @_;  # get correct and student MathObjects
+       my ($a) = $student->value;        # get coordinates of student answer
+       return ($a >= Compute("$k") ? 1 : 0);      # return 1 if correct, 0 otherwise
+     }
+   ));
+
+ANS(num_cmp($L, strings=>["DNE"]));
+
+ENDDOCUMENT();

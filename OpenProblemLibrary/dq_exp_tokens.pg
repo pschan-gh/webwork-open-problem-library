@@ -1,0 +1,402 @@
+## DESCRIPTION
+## Algebraic equations
+## ENDDESCRIPTION
+
+
+########################################
+#  Initialization
+
+DOCUMENT();
+
+loadMacros(
+"PGstandard.pl",
+"MathObjects.pl",
+"parserMultiAnswer.pl",
+"AnswerFormatHelp.pl",
+"contextArbitraryString.pl",
+"parserPopUp.pl",
+"nested.pl",
+"custom_ma_ui.pl"
+);
+
+TEXT(beginproblem());
+
+#######################################
+#  Set-up
+
+$b = random(2,5,1);
+
+Context("Numeric");
+Context()->variables->set(x=>{limits=>[10,20]});
+Context()->variables->add(h=>["Real", limits => [0.1, 5]]);
+
+my $line1 = Formula("(e^(2(x + h)) - e^(2x))/h");
+my $line2 = Formula("(e^(2x))(e^(2h) - 1)/h");
+my $line3 = Formula("2(e^(2x))(e^(2h) - 1)/(2h)");
+my $line4 = Formula("2e^(2x)");
+
+Context()->strings->add('= limit_{h -> 0}' => {caseSensitive => 0});
+my $type = PopUp(["?", "=", "= lim_{h -> 0}"], "?");
+my $limit = PopUp(["?", "=", "= lim_{h -> 0}"], "= lim_{h -> 0}");
+my $equality = PopUp(["?", "=", "= lim_{h -> 0}"], "=");
+
+my %cmp0;
+my %cmp1;
+my %cmp2a;
+my %cmp2b;
+my %cmp3;
+my %cmp4;
+
+%cmp0 = (
+    'name' => 'cmp0',
+    'fp' => [ () ],
+    'nfp' => [ () ],
+    'mp' => $type,
+    "checker" => '',
+    "score" => 0,
+    "parent_names" => [()],
+    "has_children" => 1
+);
+%cmp1 = ( #(e^[2*(x+h)]-e^(2*x))/h
+    'name' => 'cmp1',
+    'fp' => [ ("e^(2(x + h)) - e^(2x)") ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 1/3,
+    "parent_names" => [("cmp0")],
+    "has_children" => 1
+);
+%cmp2a = ( # e^(2*x)*[e^(2*h)-1]/h
+    'name' => 'cmp2a',
+    'fp' => [ ("e^(2h) - 1", "h") ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp1")],
+    "has_children" => 1
+);
+
+%cmp2b = ( # e^(2*x)*[e^h-1](e^h + 1)/h
+    'name' => 'cmp2b',
+    'fp' => [ ("e^h - 1", "h") ],
+    'nfp' => [ ("2e^(2x)") ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp1", "cmp2a")],
+    "has_children" => 1
+);
+
+%cmp2c = ( # [e^(x+h)+ e^x](e^(x + h) - e^x)/h
+    'name' => 'cmp2c',
+    'fp' => [ ("e^(x+h) - e^x", "h") ],
+    'nfp' => [ ("2") ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp1")],
+    "has_children" => 1
+);
+
+%cmp3 = ( # 2e^(2*x)*[e^(2*h)-1]/(2h)
+    'name' => 'cmp3',
+    'fp' => [ ( "e^(2h) - 1", "2h" ) ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp2a")],
+    "has_children" => 1
+);
+
+%cmp3a = ( # [e^(x+h)+ e^x]e^x(e^h - 1)/h
+    'name' => 'cmp3a',
+    'fp' => [ ("e^x",  "e^h - 1", "h" ) ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp2c")],
+    "has_children" => 1
+);
+
+%cmp3b = ( # e^(2x)[e^h + 1](e^h - 1)/h
+    'name' => 'cmp3b',
+    'fp' => [ ("e^h+1",  "e^h - 1", "h" ) ],
+    'nfp' => [ () ],
+    'mp' => $limit,
+    "score" => 2/3,
+    "parent_names" => [("cmp2c")],
+    "has_children" => 1
+);
+
+%cmp4 = ( # 2e^(2x)
+    'name' => 'cmp4',
+    'fp' => [ ("2e^(2x)") ],
+    'nfp' => [ ("h") ],
+    'mp' => $equality,
+    "score" => 1,
+    "parent_names" => [("cmp3", "cmp3a", "cmp3b", "cmp2b")],
+    "has_children" => 0
+);
+
+my @cmps = (~~%cmp1, ~~%cmp2a, ~~%cmp2b, ~~%cmp2c, ~~%cmp3, ~~%cmp3a, ~~%cmp3b, ~~%cmp4);
+
+sub sanitize {
+    $str = shift;
+
+    $str = Formula($str);
+    $str =~ s/~~[/(/g;
+    $str =~ s/~~]/)/g;
+    return $str;
+}
+
+sub token_match {
+    my ($tokens, $fp, $nfp, $flag) = @_;
+
+    my $match = 1;
+
+    if (scalar(@{ $fp }) == 0) {
+	return 0;
+    }
+
+    for my $exp (@{ $fp }) {
+        if ($match) {
+            # warn "<br/>MATCH AGAINST: $exp";
+            $match = 0;
+            for my $token (@$tokens) {
+                if (Formula($exp) == Formula($token)) {
+                    # warn "<br/>TOKEN: ".$token." MATCHES.";
+                    if ($flag eq 'all') {
+                        $match = 1;
+                        last;
+                    } elsif ($flag eq 'any') {
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+    for my $exp (@{ $nfp }) {
+	# warn "<br/>NEGATIVE MATCH AGAINST: $exp";
+	for my $token (@$tokens) {
+	    if (Formula($exp) == Formula($token)) {
+		# warn "<br/>TOKEN: ".$token." MATCHES.";
+		return 0;
+	    }
+	}
+    }
+    return $match;
+}
+
+sub comparator {
+
+    my ($mp, $exp, $cmp) = @_;
+
+    my $fp = $cmp->{'fp'};
+    my $nfp = $cmp->{'nfp'};
+    my $correct_mp = $cmp->{'mp'};
+
+    Context("Numeric");
+    # Context("KeepParens");
+    Context()->variables->set(x=>{limits=>[10,20]});
+    Context()->variables->add(h=>["Real", limits => [0.1, 5]]);
+    # Context()->flags->set(showExtraParens=>2);
+
+    if ((Formula($exp) == Formula($line1)) || (Formula($exp) == Formula($line4))) {
+	my @tokens = tokenize($exp);
+	# warn "<br/>TOKENS: ".join(" , ", @tokens);
+	# warn "FINGERPRINT: ".join(" , ", @{ $fp });
+        if ($mp eq $correct_mp) {
+            if ( token_match([ @tokens ], $fp, $nfp, "all" ) ) {
+                return 1;
+            } else {
+                return -1;
+            }
+        } else {
+	    if ($correct_mp == $limit) {
+		if ( ( token_match([ @tokens ], [ (h) ], [()], "all" )) || ( $exp =~ /([^a-z]|^)h([^a-z]|$)/i ) ) {
+		    return -2; # expression after equality should not involve h
+		} else {
+		    return -1;
+		}
+	    }
+	}
+    } else {
+        return -2;
+    }
+
+}
+
+$multians = MultiAnswer($limit, $line1, $limit, $line2, $limit, $line3, $equality, $line4, $equality, $line4, $equality, $line4)->with(
+  singleResult => 0,
+  allowBlankAnswers => 1,
+  removeParens => 0,
+  checker => sub {
+
+      my ( $correct, $student, $self ) = @_;
+
+      my @score = (0) x 12;
+
+      my @stu = @{$student};
+
+      my $showmorework = "The expression is correct, but I don't quite follow how it is deduced.  Please show more intermediate steps.";
+      my $redundant = "Correct, keep going.";
+      my $keep_going = "&#x2713; Good, keep going. &#128077;";
+      my $flaw = "There appears to be an error in your expression.";
+
+      Context("ArbitraryString");
+      my $limit = Compute("= lim_{h -> 0}");
+      my $equality = Compute("=");
+
+      my $stages = 1;
+      my $index = 0;
+      my $exp;
+
+      for (my $k = 0; $k < @stu/2; $k++) {
+          $self->setMessage(2*$k + 2, "<span style='color:#999'>This line is blank or ignored.</span>");
+      }
+
+      my %cmp = %cmp0;
+
+      my @old_fp = ();
+
+      for (my $j=0; $j < @stu/2; $j++) {
+          $index = 2*$j;
+
+          Context("ArbitraryString");
+          if (String($stu[$index + 1]) =~ /^$/) {
+              last;
+          }
+
+          my $verdict = -2;
+          my $tentative;
+
+	  # warn "LOOKING FOR RELATIVES OF: ".$cmp{'name'};
+	  for my $aux_cmp (@cmps) {
+	      $tentative = comparator(sanitize($stu[$index]), sanitize($stu[$index + 1]), $aux_cmp);
+          if ($tentative == 1) {
+              my $aux_name = $aux_cmp->{'name'};
+              my $self_name = $cmp{'name'};
+              # warn "MATCH AUX";
+              # warn $aux_name." , ".$self_name;
+              if ($aux_name eq $self_name) {
+                  warn "PARENT MATCH";
+                  %cmp = %{ $aux_cmp };
+                  $verdict = 0 > $verdict ? 0 : $verdict;
+                  # last;
+              } elsif (grep( /^$self_name$/, @{ $aux_cmp->{'parent_names'} } )) {
+                  # warn "CHILD MATCH";
+                  %cmp = %{ $aux_cmp };
+                  $verdict = 1 > $verdict ? 1 : $verdict;
+                  if ( $cmp{'has_children'} == 0) {
+                      $verdict = 2;
+                  };
+                  last;
+              } elsif (grep( /^$aux_name$/, @{ $cmp{'parent_names'} } )){
+                  # warn "GRANDPARENT MATCH";
+                  %cmp = %{ $aux_cmp };
+                  $verdict = 0 > $verdict ? 0 : $verdict;
+              } else {
+                  $verdict = -1 > $verdict ? -1 : $verdict;
+              }
+          } elsif ($tentative == -1) {
+		  $verdict = -1 > $verdict ? -1 : $verdict;
+	      }
+	  }
+
+	  # warn "VERDICT: ".$verdict;
+
+          if (($verdict == 2) || ($verdict == 1)) {
+              my $msg = $verdict == 2 ? "<strong>&#x2713;&#x2713; That is a correct final answer! &#128079;</strong>" : $keep_going;
+              $self->setMessage($index + 2, $msg);
+              $score[$index]++;
+              $score[$index + 1]++;
+              if ($verdict == 2) {
+                  last;
+              } else {
+                  next;
+              }
+          } elsif ($verdict == 0) {
+              $self->setMessage($index + 2, $redundant);
+              next;
+          } elsif ($verdict == -1) {
+              $self->setMessage($index + 2, $showmorework);
+              last;
+          } elsif ($verdict == -2) {
+              $self->setMessage($index + 2, $flaw);
+              last;
+          }
+
+      }
+
+      my $total = 0;
+      for (my $i = 0; $i < @stu; $i++) {
+          $total += $score[$i];
+      }
+      $total = $total == 0 ? 1 : $total;
+      # warn "<br/>TOTAL is $total";
+
+      for (my $i = 0; $i < @stu; $i++) {
+          $score[$i] *= @score*($cmp{'score'}/$total);
+      }
+      return @score;
+  }
+);
+
+################################################
+#  Main text
+
+Context()->texStrings;
+BEGIN_TEXT
+$BCENTER
+$BBOLD
+Optional Experimental Problem.  Please let us know if you encounter any errors.
+$EBOLD
+$BR
+This is experimental programming, so
+it is possible that your answer is correct and well-justified yet a negative feedback message is nonetheless generated.
+$BR
+
+Please simplify fractional expressions as much as possible.
+For example, simplify \(\displaystyle \frac{\left(\frac{a}{b}\right)}{c}\) to \(\displaystyle\frac{a}{bc}\).
+$BR
+(You may leave unused lines blank.)
+$ECENTER
+$BR
+$HR
+Let \(\displaystyle f(x) = e^{2x}\).
+Use the limit definition of the derivative to find \(f'(x)\).
+$BR
+$BCENTER
+$BR
+\[f'(x) = \displaystyle \lim_{h \rightarrow 0} \frac{f(x + h) - f(x)}{h}\]
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \}  \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$BR
+\{ $multians->ans_rule(0) \} \{ $multians->ans_rule(30) \}
+$ECENTER
+END_TEXT
+
+TEXT(MODES(
+     TeX        => "",
+     HTML       =>  $javaScript,
+ ));
+
+
+ BEGIN_TEXT
+ \{ AnswerFormatHelp("formula") \}
+ END_TEXT
+
+################################################
+#  Answer evaluation
+
+$showPartialCorrectAnswers = 1;
+
+ANS($multians->cmp());
+
+ENDDOCUMENT();
